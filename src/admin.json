@@ -1,0 +1,9 @@
+{
+    "router":   {
+        "ip":   "10.0.0.1"
+    },
+    "creds":    {
+        "user": "admin",
+        "pass": "password"
+    }
+}
