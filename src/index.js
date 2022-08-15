@@ -15,5 +15,6 @@ pt.launch({headless:true}).then(async browser => {
     await p.click('#btn1')
     await p.waitForTimeout(500);
     await p.click('#popup_ok')
+    await p.waitForTimeout(50000);
     await browser.close()
  })
