@@ -13,7 +13,7 @@ pt.launch({headless:true}).then(async browser => {
     await p.goto(`http://${admin.router.ip}/restore_reboot.jst`)
     await p.waitForSelector('#btn1', {visible:true,})
     await p.click('#btn1')
-    await p.waitFor(500);
+    await p.waitForTimeout(500);
     await p.click('#popup_ok')
     await browser.close()
  })
