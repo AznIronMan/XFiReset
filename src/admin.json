@@ -1,9 +1,19 @@
 {
-    "router":   {
-        "ip":   "10.0.0.1"
+    "dev": false,
+    "router": {
+        "ip": "10.0.0.1"
     },
-    "creds":    {
+    "creds": {
         "user": "admin",
         "pass": "password"
+    },
+    "smtp": {
+        "mode": true,
+        "server": "mail.yourmailserver.com",
+        "port": 465,
+        "ssl": true,
+        "user": "theFrom@yourmailserver.com",
+        "pass": "password",
+        "to": "yourEmail@yourmailserver.com"
     }
 }
