@@ -40,4 +40,6 @@ Thumbs.db
 #*.exe
 *.war
 
-admin.json
+src\admin.json
+*.json
+src/admin.json
