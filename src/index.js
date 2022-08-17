@@ -20,8 +20,7 @@ async function run() {
     await p.click('#popup_ok');
     await p.waitForTimeout(50000);
     await browser.close();
-    await reboot();         //use puppeteer to log into Xfi Gateway and execute reboot
-    await delay(900000);    //wait 15 minutes for Xfi Gateway to reboot
+    await delay(300000);    //wait 5 minutes for Xfi Gateway to reboot
     await diditWork();
     await browser.close();
   });
