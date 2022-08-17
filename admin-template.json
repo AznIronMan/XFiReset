@@ -1,9 +1,14 @@
 {
-    "dev": false,
-    "router": {
-        "ip": "10.0.0.1"
+    "show": false,
+    "xfi": {
+        "mode": true,
+        "ip": "10.0.0.1",
+        "user": "admin",
+        "pass": "password"
     },
-    "creds": {
+    "netgear": {
+        "mode": true,
+        "ip": "routerlogin.net",
         "user": "admin",
         "pass": "password"
     },
@@ -15,5 +20,11 @@
         "user": "theFrom@yourmailserver.com",
         "pass": "password",
         "to": "yourEmail@yourmailserver.com"
+    },
+    "speed": {
+        "mode": true,
+        "ping": 50,
+        "download": 10,
+        "upload": 10
     }
 }

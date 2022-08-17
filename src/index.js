@@ -1,61 +1,128 @@
-//Version 1.01 - 2022.08.16
+//Version 1.02 - 2022.08.17
 
 const pt = require("puppeteer");
 const fs = require("fs-extra");
 const smtp = require("nodemailer");
-let admin = require("./admin.json");
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-let task = false;
+const exec = require("child_process").exec;
+let admin,
+  transport,
+  needTest = false,
+  xfiTask = false,
+  netgearTask = false,
+  speeds;
 
 async function run() {
-  pt.launch({ headless: admin.dev }).then(async (browser) => {
-    await adminCheck(); //check for admin.json file
-    const p = await browser.newPage();
-    await login(p);
-    await p.waitForSelector("#internet-usage > div > a", { visible: true });
-    await p.goto(`http://${admin.router.ip}/restore_reboot.jst`);
-    await p.waitForSelector("#btn1", { visible: true });
-    await p.click("#btn1");
-    await p.waitForTimeout(500);
-    await p.click('#popup_ok');
-    await p.waitForTimeout(50000);
-    await browser.close();
-    await delay(300000);    //wait 5 minutes for Xfi Gateway to reboot
-    await diditWork();
-    await browser.close();
-  });
-}
-
-async function adminCheck() {
-  if (!fs.existsSync("../admin.json")) {
-    //TO DO: add something to generate admin.json here with prompts?
-    console.log(
-      "File admin.json missing.  Please download from Github or create from scratch."
-    );
-    process.exit(1);
+  await adminCheck(); //checks for admin.json and speed-test npm requirement
+  if (admin.smtp.mode) {
+    await buildTransport(); //if smtp is enabled, builds the smtp transporter
+  }
+  await speedTest();  //runs speed test to see if the reboots are needed
+  if (needTest) {
+    pt.launch({
+      headless: admin.show,
+      args: [
+        "--disable-web-security",
+        "--disable-features=IsolateOrigins,site-per-process",
+      ],
+    }).then(async (browser) => {
+      await adminCheck(); //check for admin.json file
+      const p = await browser.newPage();
+      if (admin.xfi.mode) {
+        await xfiReboot(p);
+        await browser.close();
+        await p.waitForTimeout(300000); //wait 5 minutes for Xfi Gateway to reboot
+        await xfiResult();
+        await browser.close();
+        if (admin.netgear.mode) {
+          await netgearReboot(p);
+          await browser.close();
+          await p.waitForTimeout(300000); //wait 5 minutes for Netgear Router to reboot
+          await netgearResult();
+          await browser.close();
+        }
+      }
+      await browser.close();
+    });
   }
 }
 
-async function login(page) {
+async function speedTest() {
+  if(admin.speed.mode) {
+    const speedResults = await runCmd("speed-test -j");
+    const splitResults = speedResults.split(":");
+    const ping = parseInt(splitResults[1].split(",")[0]);
+    const down = parseInt(splitResults[2].split(",")[0]);
+    const up = parseInt(splitResults[3].split("}")[0]);
+    speeds = `P:${ping}  D:${down}  U:${up}`;
+    if (
+      ping > admin.speed.ping ||
+      down < admin.speed.down ||
+      up < admin.speed.up
+    ) {
+      speedTest = true;
+    } else {
+      speedTest = false;
+      result("Speed Test", speedTest);
+    }
+  } else {
+    speedTest = true;
+  }
+}
+
+async function adminCheck() {
+  const npmList = await runCmd("npm list -g");
+  if (!npmList.includes("speed-test@")) {
+    await runCmd("npm install speed-test -g");
+  }
+  if (!fs.existsSync("./admin.json")) {
+    await fs.writeFile("admin.json", fs.readFileSync("admin-template.json"));
+    await adminCheck();
+  } else {
+    admin = require("../admin.json");
+    if (admin.xfi.pass == "password" && admin.netgear.pass == "password") {
+      await fs.writeFile(
+        "__FIX YOUR ADMIN.JSON__.txt",
+        "Your admin.json is still the default settings, please update!"
+      );
+    } else {
+      if (fs.existsSync("__FIX YOUR ADMIN.JSON__.txt")) {
+        fs.rm("__FIX YOUR ADMIN.JSON__.txt", { force: true });
+      }
+    }
+  }
+}
+
+async function xfiLogin(page) {
   await page.setViewport({ width: 1000, height: 500 });
-  await page.goto(`http://${admin.router.ip}`);
+  await page.goto(`http://${admin.xfi.ip}`);
   await page.click("#username");
-  await page.keyboard.type(admin.creds.user);
+  await page.keyboard.type(admin.xfi.user);
   await page.click("#password");
-  await page.keyboard.type(admin.creds.pass);
+  await page.keyboard.type(admin.xfi.pass);
   await page.click("#pageForm > div.form-btn > input");
 }
 
-async function diditWork() {
+async function xfiReboot(page) {
+  await xfiLogin(page);
+  await page.waitForSelector("#internet-usage > div > a", { visible: true });
+  await page.goto(`http://${admin.xfi.ip}/restore_reboot.jst`);
+  await page.waitForSelector("#btn1", { visible: true });
+  await page.click("#btn1");
+  await page.waitForTimeout(500);
+  await page.click("#popup_ok");
+  await page.waitForTimeout(50000);
+}
+
+async function xfiResult() {
   try {
     pt.launch({ headless: false }).then(async (browser) => {
       const p = await browser.newPage();
-      await login(p);
+      await xfiLogin(p);
       await p.waitForSelector(
         "#at-a-glance-switch > a:nth-child(1) > li > label",
         { visible: true }
       );
-      await p.goto(`http://${admin.router.ip}/network_setup.jst`);
+      await p.goto(`http://${admin.xfi.ip}/network_setup.jst`);
       await p.waitForSelector(
         "#content > div:nth-child(8) > table > tbody > tr:nth-child(4) > th",
         { visible: true }
@@ -67,20 +134,68 @@ async function diditWork() {
         .replace('<span class="value">', "")
         .substring(0, 26);
       if (time.includes(" 0h")) {
-        task = true;
+        xfiTask = true;
       } else {
-        task = false;
+        xfiTask = false;
       }
-      await result();
+      await result("XFi Gateway Reboot", xfiTask);
+      await browser.close();
     });
   } catch {
-    task = false;
-    await result();
+    xfiTask = false;
+    await result("XFi Gateway Reboot", xfiTask);
   }
 }
 
-async function result() {
-  const t = smtp.createTransport({
+async function netgearLogin(page) {
+  await page.setViewport({ width: 1000, height: 500 });
+  await page.authenticate({
+    username: admin.netgear.user,
+    password: admin.netgear.pass,
+  });
+  await page.goto(`http://${admin.netgear.ip}/adv_index.htm`);
+}
+
+async function netgearReboot(page) {
+  await netgearLogin(page);
+  const frame = await page
+    .frames()
+    .find((frame) => frame.name() === "formframe");
+  await frame.waitForTimeout(5000);
+  await frame.click("#reboot");
+  await frame.waitForTimeout(5000);
+  await frame.click("#yes");
+}
+
+async function netgearResult() {
+  try {
+    pt.launch({ headless: false }).then(async (browser) => {
+      const p = await browser.newPage();
+      await netgearLogin(p);
+      const frame = await p
+        .frames()
+        .find((frame) => frame.name() === "formframe");
+      await frame.waitForTimeout(5000);
+      let grab = await frame.evaluate(
+        () => document.querySelector("*").textContent
+      );
+      const time = grab.split("System Uptime")[1].substring(0, 3);
+      if (time.includes("00")) {
+        netgearTask = true;
+      } else {
+        netgearTask = false;
+      }
+      await result("Netgear Router Reboot", netgearTask);
+      await browser.close();
+    });
+  } catch {
+    netgearTask = false;
+    await result("Netgear Router Reboot", netgearTask);
+  }
+}
+
+async function buildTransport() {
+  transport = smtp.createTransport({
     host: admin.smtp.server,
     port: admin.smtp.port,
     secure: admin.smtp.ssl,
@@ -89,18 +204,55 @@ async function result() {
       pass: admin.smtp.pass,
     },
   });
-  const today = new Date();
-  let title = "FAILURE";
-  let theResult = "failed!";
-  if (task) {
-    theResult = "was successful!";
-    title = "SUCCESS";
+}
+
+async function result(type, task) {
+  if (admin.smtp.mode) {
+    const today = new Date();
+    let title, theResult;
+    title = "FAILURE";
+    if(admin.speed.mode) {
+      theResult = `failed!\n\nSpeed Test Results Before Test: ${speeds}`
+    } else {
+      theResult = "failed!"
+    }
+    if (type.includes("Reboot")) {
+      if (task) {
+        if(admin.speed.mode) {
+          theResult = `was successful!\n\nSpeed Test Results Before Test: ${speeds}`;
+        } else {
+          theResult = "was successful!"
+        }
+        title = "SUCCESS";
+      }
+    } else {
+      if (!task) {
+        theResult = `${speeds
+          .replace("P:", "Ping: ")
+          .replace("D:", "Download: ")
+          .replace("U:", "Upload: ")}\n\nNo Reboots Were Needed!`;
+        title = `NO ACTION - ${speeds}`;
+      }
+    }
+    let info = await transport.sendMail({
+      from: admin.smtp.user,
+      to: admin.smtp.to,
+      subject: `${type} ${today.getMonth()}/${today.getDate()}/${today.getFullYear()} - ${title}`,
+      text: `${type} ${theResult}`,
+    });
   }
-  let info = await t.sendMail({
-    from: admin.smtp.user,
-    to: admin.smtp.to,
-    subject: `XFi Daily Reboot ${today.getMonth()}/${today.getDate()}/${today.getFullYear()} - ${title}`,
-    text: `Your daily reboot of your XFi Gateway ${theResult}`,
+}
+
+async function runCmd(cmd) {
+  return new Promise((resolve, reject) => {
+    let result = "";
+    const child = exec(`${cmd}`);
+    child.stdout.on("data", function (data) {
+      result += data.replace(/[\n\r]+/g, "");
+    });
+    return child.on("close", function () {
+      resolve(result);
+    });
   });
 }
 
