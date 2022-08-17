@@ -55,8 +55,8 @@ async function speedTest() {
     const up = parseInt(splitResults[3].split("}")[0]);
     speeds = `P:${ping}  D:${down}  U:${up}`;
     if (
-      ping > admin.speed.ping ||
-      down < admin.speed.down ||
+      ping > admin.speed.ping &&
+      down < admin.speed.down &&
       up < admin.speed.up
     ) {
       speedTest = true;
