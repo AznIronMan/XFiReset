@@ -1,4 +1,4 @@
-//Version 1.02 - 2022.08.17
+//Version 1.03 - 2022.08.18
 
 const pt = require("puppeteer");
 const fs = require("fs-extra");
@@ -55,9 +55,9 @@ async function speedTest() {
     const up = parseInt(splitResults[3].split("}")[0]);
     speeds = `P:${ping}  D:${down}  U:${up}`;
     if (
-      ping > admin.speed.ping &&
-      down < admin.speed.down &&
-      up < admin.speed.up
+      ping < admin.speed.ping &&
+      down > admin.speed.down &&
+      up > admin.speed.up
     ) {
       speedTest = true;
     } else {
