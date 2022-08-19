@@ -16,7 +16,7 @@ async function run() {
   if (admin.smtp.mode) {
     await buildTransport(); //if smtp is enabled, builds the smtp transporter
   }
-  await speedTest();  //runs speed test to see if the reboots are needed
+  needTest = await speedTest();  //runs speed test to see if the reboots are needed
   if (needTest) {
     pt.launch({
       headless: admin.show,
@@ -59,13 +59,12 @@ async function speedTest() {
       down > admin.speed.down &&
       up > admin.speed.up
     ) {
-      speedTest = true;
+      return true;
     } else {
-      speedTest = false;
-      result("Speed Test", speedTest);
+      result("Speed Test", false);
     }
   } else {
-    speedTest = true;
+    return true;
   }
 }
 
