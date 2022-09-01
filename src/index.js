@@ -16,7 +16,7 @@ async function run() {
   if (admin.smtp.mode) {
     await buildTransport(); //if smtp is enabled, builds the smtp transporter
   }
-  needTest = await speedTest();  //runs speed test to see if the reboots are needed
+  needTest = await speedTest(); //runs speed test to see if the reboots are needed
   if (needTest) {
     pt.launch({
       headless: admin.show,
@@ -34,9 +34,10 @@ async function run() {
         await xfiResult();
         await browser.close();
         if (admin.netgear.mode) {
-          await netgearReboot(p);
+          const q = await browser.newPage();
+          await netgearReboot(q);
           await browser.close();
-          await p.waitForTimeout(300000); //wait 5 minutes for Netgear Router to reboot
+          await q.waitForTimeout(300000); //wait 5 minutes for Netgear Router to reboot
           await netgearResult();
           await browser.close();
         }
@@ -47,18 +48,27 @@ async function run() {
 }
 
 async function speedTest() {
-  if(admin.speed.mode) {
+  if (admin.speed.mode) {
     const speedResults = await runCmd("speed-test -j");
     const splitResults = speedResults.split(":");
     const ping = parseInt(splitResults[1].split(",")[0]);
     const down = parseInt(splitResults[2].split(",")[0]);
     const up = parseInt(splitResults[3].split("}")[0]);
+    const pingResult = ping > admin.speed.ping;
+    const downResult = down < admin.speed.down;
+    const upResult = up < admin.speed.up;
+    let decision = false;
     speeds = `P:${ping}  D:${down}  U:${up}`;
-    if (
-      ping < admin.speed.ping &&
-      down > admin.speed.down &&
-      up > admin.speed.up
-    ) {
+    if (!decision && pingResult) {
+      decision = true;
+    }
+    if (!decision && downResult) {
+      decision = true;
+    }
+    if (!decision && upResult) {
+      decision = true;
+    }
+    if (decision) {
       return true;
     } else {
       result("Speed Test", false);
@@ -210,17 +220,17 @@ async function result(type, task) {
     const today = new Date();
     let title, theResult;
     title = "FAILURE";
-    if(admin.speed.mode) {
-      theResult = `failed!\n\nSpeed Test Results Before Test: ${speeds}`
+    if (admin.speed.mode) {
+      theResult = `failed!\n\nSpeed Test Results Before Test: ${speeds}`;
     } else {
-      theResult = "failed!"
+      theResult = "failed!";
     }
     if (type.includes("Reboot")) {
       if (task) {
-        if(admin.speed.mode) {
+        if (admin.speed.mode) {
           theResult = `was successful!\n\nSpeed Test Results Before Test: ${speeds}`;
         } else {
-          theResult = "was successful!"
+          theResult = "was successful!";
         }
         title = "SUCCESS";
       }
