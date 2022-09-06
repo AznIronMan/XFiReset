@@ -26,5 +26,6 @@
         "ping": 50,
         "download": 10,
         "upload": 10
-    }
+    },
+    "log": true
 }
