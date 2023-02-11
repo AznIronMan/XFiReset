@@ -1,17 +1,13 @@
-//Version 1.04 - 2022.08.18
+//Version 1.05 - 2023-02-11
 
-const pt = require("puppeteer");
+const { launch, newPage } = require("puppeteer");
 const fs = require("fs-extra");
-const smtp = require("nodemailer");
-const logger = require("node-logger").createLogger(
-  `${dateMaker(new Date())}.log`
-);
-logger.format = function (level, date, message) {
-  return `[${level} ${date.getHours().toString()}:${date
-    .getMinutes()
-    .toString()}:${date.getSeconds().toString()}]${message}`;
-};
-const exec = require("child_process").exec;
+const { createTransport } = require("nodemailer");
+let logger = require("node-logger");
+const { exec } = require("child_process");
+
+logger.format = (level, date, message) => `[${level} ${date.getHours().toString()}:${date.getMinutes().toString()}:${date.getSeconds().toString()}]${message}`;
+
 let admin,
   transport,
   needTest = false,
@@ -21,6 +17,7 @@ let admin,
 
 async function run() {
   await adminCheck(); //checks for admin.json and speed-test npm requirement
+  logger = require("node-logger").createLogger(`${admin.path}${dateMaker(new Date())}.log`);
   lg("Starting Run...");
   if (admin.smtp.mode) {
     lg("Building SMTP transport.");
@@ -30,7 +27,7 @@ async function run() {
   needTest = await speedTest(); //runs speed test to see if the reboots are needed
   if (needTest) {
     lg(`Starting Virtual Browser (Headless: ${admin.show}`);
-    pt.launch({
+    launch({
       headless: admin.show,
       args: [
         "--disable-web-security",
@@ -64,11 +61,11 @@ async function run() {
 async function speedTest() {
   if (admin.speed.mode) {
     lg("Running Speed Test...");
-    const speedResults = await runCmd("fast --upload --json");
-    const splitResults = speedResults.split(":");
-    const ping = parseInt(splitResults[5].split(",")[0]);
-    const down = parseInt(splitResults[1].split(",")[0]);
-    const up = parseInt(splitResults[2].split("}")[0]);
+    let speedResults = await runCmd("fast --upload --json");
+    speedResults = JSON.parse(speedResults);
+    const ping = speedResults.latency;
+    const down = speedResults.downloadSpeed;
+    const up = speedResults.uploadSpeed;
     const pingResult = ping > admin.speed.ping;
     const downResult = down < admin.speed.down;
     const upResult = up < admin.speed.up;
@@ -78,13 +75,7 @@ async function speedTest() {
     );
     let decision = false;
     speeds = `P:${ping}  D:${down}  U:${up}`;
-    if (!decision && pingResult) {
-      decision = true;
-    }
-    if (!decision && downResult) {
-      decision = true;
-    }
-    if (!decision && upResult) {
+    if (pingResult || downResult || upResult) {
       decision = true;
     }
     if (decision) {
@@ -93,6 +84,7 @@ async function speedTest() {
     } else {
       lg("Result show that SpeedTest is NOT Required. #False");
       result("Speed Test", false);
+      return false;
     }
   } else {
     lg("Speed Test Check Disabled, Reboots are required!");
@@ -101,15 +93,13 @@ async function speedTest() {
 }
 
 async function adminCheck() {
-  const npmList = await runCmd("npm list -g");
-  if (!npmList.includes("fast-cli@")) {
-    await runCmd("npm install fast-cli -g");
-  }
+  await runCmd("npm list -g | grep fast-cli || npm install fast-cli -g");
   if (!fs.existsSync("./admin.json")) {
     await fs.writeFile("admin.json", fs.readFileSync("admin-template.json"));
     await adminCheck();
   } else {
     admin = require("../admin.json");
+    logger = require("node-logger").createLogger(`${admin.path}${dateMaker(new Date())}.log`);
     if (admin.xfi.pass == "password" && admin.netgear.pass == "password") {
       lg(
         "admin.json is still in raw format, please update admin.json to continue!"
@@ -156,7 +146,7 @@ async function xfiReboot(page) {
 async function xfiResult() {
   lg("XFi Result Start");
   try {
-    pt.launch({ headless: false }).then(async (browser) => {
+    launch({ headless: false }).then(async (browser) => {
       const p = await browser.newPage();
       await xfiLogin(p);
       await p.waitForSelector(
@@ -168,12 +158,9 @@ async function xfiResult() {
         "#content > div:nth-child(8) > table > tbody > tr:nth-child(4) > th",
         { visible: true }
       );
-      let grab = await p.evaluate(() => document.querySelector("*").innerHTML);
-      const time = grab
+      const time = (await p.evaluate(() => document.querySelector("*").innerHTML))
         .split('<span class="readonlyLabel">System Uptime:</span>')[1]
-        .replace(/[\r\n\x0B\x0C\u0085\u2028\u2029]+/g, "")
-        .replace('<span class="value">', "")
-        .substring(0, 26);
+        .match(/\d{1,2}h \d{1,2}m \d{1,2}s/)[0];
       if (time.includes(" 0h")) {
         xfiTask = true;
       } else {
@@ -215,17 +202,16 @@ async function netgearReboot(page) {
 
 async function netgearResult() {
   try {
-    pt.launch({ headless: false }).then(async (browser) => {
+    launch({ headless: false }).then(async (browser) => {
       const p = await browser.newPage();
       await netgearLogin(p);
       const frame = await p
         .frames()
         .find((frame) => frame.name() === "formframe");
       await frame.waitForTimeout(5000);
-      let grab = await frame.evaluate(
-        () => document.querySelector("*").textContent
-      );
-      const time = grab.split("System Uptime")[1].substring(0, 3);
+      const time = (await frame.evaluate(() => document.querySelector("*").textContent))
+        .split("System Uptime")[1]
+        .substring(0, 3);
       if (time.includes("00")) {
         netgearTask = true;
       } else {
@@ -243,7 +229,7 @@ async function netgearResult() {
 }
 
 async function buildTransport() {
-  transport = smtp.createTransport({
+  transport = createTransport({
     host: admin.smtp.server,
     port: admin.smtp.port,
     secure: admin.smtp.ssl,
@@ -313,7 +299,6 @@ function dateMaker(rawDate) {
   const hours = rawDate.getHours();
   const minutes = rawDate.getMinutes();
   const seconds = rawDate.getSeconds();
-  console.log(`${year}${month}${date}_${hours}${minutes}${seconds}`);
   return `${year}${month}${date}_${hours}${minutes}${seconds}`;
 }
 

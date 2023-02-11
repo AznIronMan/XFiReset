@@ -27,5 +27,6 @@
         "download": 10,
         "upload": 10
     },
-    "log": true
+    "log": true,
+    "path": ""
 }
