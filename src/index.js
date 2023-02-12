@@ -1,10 +1,11 @@
-//Version 1.05 - 2023-02-11
+//Version 1.06 - 2023-02-11
 
-const { launch, newPage } = require("puppeteer");
+const pt = require("puppeteer");
 const fs = require("fs-extra");
-const { createTransport } = require("nodemailer");
+const smtp = require("nodemailer");
 let logger = require("node-logger");
 const { exec } = require("child_process");
+const st = require("speedtest-net");
 
 logger.format = (level, date, message) => `[${level} ${date.getHours().toString()}:${date.getMinutes().toString()}:${date.getSeconds().toString()}]${message}`;
 
@@ -26,12 +27,15 @@ async function run() {
   }
   needTest = await speedTest(); //runs speed test to see if the reboots are needed
   if (needTest) {
-    lg(`Starting Virtual Browser (Headless: ${admin.show}`);
-    launch({
-      headless: admin.show,
+    lg(`Starting Virtual Browser (Headless: ${admin.headless}`);
+    pt.launch({
+      headless: admin.headless,
       args: [
         "--disable-web-security",
         "--disable-features=IsolateOrigins,site-per-process",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-sandbox",
       ],
     }).then(async (browser) => {
       await adminCheck(); //check for admin.json file
@@ -61,14 +65,21 @@ async function run() {
 async function speedTest() {
   if (admin.speed.mode) {
     lg("Running Speed Test...");
-    let speedResults = await runCmd("fast --upload --json");
-    speedResults = JSON.parse(speedResults);
-    const ping = speedResults.latency;
-    const down = speedResults.downloadSpeed;
-    const up = speedResults.uploadSpeed;
+    const results = await st({acceptLicense: true});
+    const {
+      ping: { latency: pingLatency },
+      download: { bandwidth: downloadSpeed },
+      upload: { bandwidth: uploadSpeed }
+    } = results;
+
+    const ping = pingLatency.toFixed(0);
+    const down = ((downloadSpeed) / (125000)).toFixed(0);
+    const up = ((uploadSpeed) / (125000)).toFixed(0);
+
     const pingResult = ping > admin.speed.ping;
     const downResult = down < admin.speed.down;
     const upResult = up < admin.speed.up;
+
     lg("Speed Test Complete...");
     lg(
       `Ping: ${ping} Down: ${down} Up: ${up} Results: [${pingResult},${downResult},${upResult}]`
@@ -146,7 +157,7 @@ async function xfiReboot(page) {
 async function xfiResult() {
   lg("XFi Result Start");
   try {
-    launch({ headless: false }).then(async (browser) => {
+    pt.launch({ headless: false }).then(async (browser) => {
       const p = await browser.newPage();
       await xfiLogin(p);
       await p.waitForSelector(
@@ -202,7 +213,7 @@ async function netgearReboot(page) {
 
 async function netgearResult() {
   try {
-    launch({ headless: false }).then(async (browser) => {
+    pt.launch({ headless: false }).then(async (browser) => {
       const p = await browser.newPage();
       await netgearLogin(p);
       const frame = await p
@@ -229,7 +240,7 @@ async function netgearResult() {
 }
 
 async function buildTransport() {
-  transport = createTransport({
+  transport = smtp.createTransport({
     host: admin.smtp.server,
     port: admin.smtp.port,
     secure: admin.smtp.ssl,

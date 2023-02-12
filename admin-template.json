@@ -1,5 +1,5 @@
 {
-    "show": false,
+    "headless": false,
     "xfi": {
         "mode": true,
         "ip": "10.0.0.1",
