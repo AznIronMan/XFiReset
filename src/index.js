@@ -1,4 +1,4 @@
-//Version 1.06 - 2023-02-11
+//Version 1.07 - 2023-02-12
 
 const pt = require("puppeteer");
 const fs = require("fs-extra");
@@ -72,13 +72,13 @@ async function speedTest() {
       upload: { bandwidth: uploadSpeed }
     } = results;
 
-    const ping = pingLatency.toFixed(0);
-    const down = ((downloadSpeed) / (125000)).toFixed(0);
-    const up = ((uploadSpeed) / (125000)).toFixed(0);
+    const ping = parseInt(pingLatency.toFixed(0));
+    const down = parseInt(((downloadSpeed) / (125000)).toFixed(0));
+    const up = parseInt(((uploadSpeed) / (125000)).toFixed(0));
 
     const pingResult = ping > admin.speed.ping;
-    const downResult = down < admin.speed.down;
-    const upResult = up < admin.speed.up;
+    const downResult = down < admin.speed.download;
+    const upResult = up < admin.speed.upload;
 
     lg("Speed Test Complete...");
     lg(
@@ -104,7 +104,6 @@ async function speedTest() {
 }
 
 async function adminCheck() {
-  await runCmd("npm list -g | grep fast-cli || npm install fast-cli -g");
   if (!fs.existsSync("./admin.json")) {
     await fs.writeFile("admin.json", fs.readFileSync("admin-template.json"));
     await adminCheck();
