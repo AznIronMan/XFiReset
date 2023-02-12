@@ -1,10 +1,10 @@
 {
   "dependencies": {
-    "fs-extra": "^10.1.0",
+    "fs-extra": "^11.1.0",
     "ng-speed-test": "^2.3.2",
     "node-logger": "^0.0.1",
-    "nodemailer": "^6.7.8",
-    "puppeteer": "^16.1.0",
+    "nodemailer": "^6.9.1",
+    "puppeteer": "^19.6.3",
     "speedtest-net": "^2.2.0"
   },
   "devDependencies": {
